@@ -1,0 +1,16 @@
+export declare const MAGNET_ON = 1;
+export declare const MAGNET_OFF = 2;
+export declare const ACTIVATE = 3;
+export declare const DEACTIVATE = 4;
+export declare const BATTERY_ALARM = 5;
+export declare const CAN_OFF = 6;
+export declare const INSERT = 7;
+export declare const REMOVE = 8;
+export declare const COUNTER_OVER = 9;
+export declare const ACTIVATE_MTX = 11;
+export declare const CONNECT = 12;
+export declare const DISCONNECT = 13;
+export declare const EV_OPTOLOW = 15;
+export declare const EV_OPTOFLASH = 16;
+export declare const EV_MTX = 17;
+export declare const EV_REJOIN = 18;

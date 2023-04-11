@@ -1,0 +1,101 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+import UnknownCommand from '../UnknownCommand.js';
+import * as downlinkCommands from '../commands/downlink/index.js';
+import * as uplinkCommands from '../commands/uplink/index.js';
+import * as directionTypes from '../constants/directionTypes.js';
+import { DIRECTION_TYPE_AUTO, DIRECTION_TYPE_DOWNLINK, DIRECTION_TYPE_UPLINK } from '../constants/directionTypes.js';
+import * as header from './header.js';
+import getBytesFromHex from './getBytesFromHex.js';
+import getHexFromBytes from './getHexFromBytes.js';
+const HEADER_MAX_SIZE = 3;
+// all allowed types
+const directionTypeIds = new Set(Object.values(directionTypes));
+// convert export namespace to dictionary {commandId: commandConstructor}
+const downlinkCommandsById = Object.fromEntries(Object.values(downlinkCommands).map(item => [item.id, item]));
+const uplinkCommandsById = Object.fromEntries(Object.values(uplinkCommands).map(item => [item.id, item]));
+/**
+ * Calculate LRC
+ *
+ * @param data - byte array
+ *
+ * @return LRC
+ */
+const calculateLrc = (data, initialLrc = 0x55) => {
+    let lrc = initialLrc;
+    data.forEach(item => {
+        lrc ^= item;
+    });
+    return lrc;
+};
+const getCommand = (id, data, direction = DIRECTION_TYPE_AUTO) => {
+    if (!directionTypeIds.has(direction)) {
+        throw new Error('wrong direction type');
+    }
+    const downlinkCommand = downlinkCommandsById[id];
+    const uplinkCommand = uplinkCommandsById[id];
+    // check command availability
+    if ((!downlinkCommand && !uplinkCommand)
+        || (direction === DIRECTION_TYPE_DOWNLINK && !downlinkCommand)
+        || (direction === DIRECTION_TYPE_UPLINK && !uplinkCommand)) {
+        // missing command implementation
+        return new UnknownCommand({ id, data });
+    }
+    // ths specific direction
+    if (direction === DIRECTION_TYPE_DOWNLINK || direction === DIRECTION_TYPE_UPLINK) {
+        const command = direction === DIRECTION_TYPE_UPLINK ? uplinkCommand : downlinkCommand;
+        return command.fromBytes(data);
+    }
+    // direction autodetect
+    try {
+        // uplink should be more often
+        return uplinkCommand.fromBytes(data);
+    }
+    catch {
+        return downlinkCommand.fromBytes(data);
+    }
+};
+export const fromBytes = (data, direction = DIRECTION_TYPE_AUTO) => {
+    const commandsData = data.slice(0, -1);
+    const expectedLrc = data.at(-1) ?? 0;
+    const actualLrc = calculateLrc(commandsData);
+    const commands = [];
+    const result = {
+        commands,
+        lrc: { expected: 0, actual: 0 },
+        isValid: false
+    };
+    let position = 0;
+    do {
+        const headerInfo = header.fromBytes(commandsData.slice(position, position + HEADER_MAX_SIZE));
+        const headerData = commandsData.slice(position, position + headerInfo.headerSize);
+        const bodyData = commandsData.slice(position + headerInfo.headerSize, position + headerInfo.headerSize + headerInfo.commandSize);
+        commands.push({
+            data: { header: headerData, body: bodyData },
+            command: getCommand(headerInfo.commandId, bodyData, direction)
+        });
+        // shift
+        position = position + headerInfo.headerSize + headerInfo.commandSize;
+    } while (position < commandsData.length);
+    result.lrc.actual = actualLrc;
+    result.lrc.expected = expectedLrc;
+    result.isValid = expectedLrc === actualLrc;
+    return result;
+};
+export const fromHex = (data, direction = DIRECTION_TYPE_AUTO) => fromBytes(getBytesFromHex(data), direction);
+export const toBytes = (commands) => {
+    const arrays = commands.map(command => command.toBytes());
+    const totalLength = arrays.reduce((accumulator, item) => (accumulator + item.length), 0);
+    // 1 additional byte at the end is for LRC
+    const result = new Uint8Array(totalLength + 1);
+    let offset = 0;
+    // fill result with all chunks
+    arrays.forEach(item => {
+        result.set(item, offset);
+        offset += item.length;
+    });
+    // set last byte to LRC
+    result[result.length - 1] = calculateLrc(result.slice(0, result.length - 1));
+    return result;
+};
+export const toHex = (commands, options = {}) => getHexFromBytes(toBytes(commands), options);
+//# sourceMappingURL=message.js.map
