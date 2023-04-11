@@ -50,7 +50,6 @@
         "lint:fix": "npm run lint:eslint -- --fix --max-warnings=0",
         "test": "npm run lint && jest",
         "test:watch": "jest --watch",
-        "preinstall": "git config core.hooksPath .githooks",
         "publish": "clean-publish"
     },
     "devDependencies": {
